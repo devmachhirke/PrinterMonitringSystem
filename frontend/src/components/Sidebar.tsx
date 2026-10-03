@@ -14,7 +14,7 @@ import {
   UserCheck,
   ShieldAlert
 } from 'lucide-react';
-import { getSavedSession, clearSession, UserSession } from '@/lib/api';
+import { getSavedSession, clearSession, switchUserRole, UserSession } from '@/lib/api';
 
 const NAV_ITEMS = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -30,10 +30,22 @@ export default function Sidebar() {
   const router = useRouter();
   const [session, setSession] = useState<UserSession | null>(null);
 
-  useEffect(() => {
+  const syncSession = () => {
     const s = getSavedSession();
     setSession(s);
+  };
+
+  useEffect(() => {
+    syncSession();
+    window.addEventListener('session-updated', syncSession);
+    return () => window.removeEventListener('session-updated', syncSession);
   }, [pathname]);
+
+  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = e.target.value as 'ADMIN' | 'TECHNICIAN' | 'VIEWER';
+    const updated = switchUserRole(selected);
+    setSession(updated);
+  };
 
   const handleLogout = () => {
     clearSession();
@@ -43,6 +55,7 @@ export default function Sidebar() {
 
   // Don't render sidebar on standalone auth pages
   if (pathname === '/login' || pathname === '/signup') {
+
     return null;
   }
 
@@ -87,15 +100,15 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* USER SESSION CARD */}
-      <div className="glass-panel" style={{ padding: '12px 14px', marginBottom: '20px', borderRadius: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* USER SESSION CARD WITH ROLE SWITCHER */}
+      <div className="glass-panel" style={{ padding: '14px', marginBottom: '20px', borderRadius: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <div>
             <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc' }}>
               {session?.fullName || 'User Portal'}
             </div>
             <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-              @{session?.username || 'guest'}
+              @{session?.username || 'admin'}
             </div>
           </div>
           <span style={{
@@ -111,7 +124,34 @@ export default function Sidebar() {
             {primaryRole}
           </span>
         </div>
+
+        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
+          <label style={{ display: 'block', fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+            Switch Access Role
+          </label>
+          <select
+            value={primaryRole === 'ADMIN' ? 'ADMIN' : primaryRole === 'TECHNICIAN' ? 'TECHNICIAN' : 'VIEWER'}
+            onChange={handleRoleChange}
+            style={{
+              width: '100%',
+              padding: '6px 10px',
+              borderRadius: '6px',
+              background: '#1e293b',
+              border: '1px solid var(--border-subtle)',
+              color: '#f8fafc',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              outline: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="ADMIN">👑 ADMIN (Full Access)</option>
+            <option value="TECHNICIAN">🛠️ TECHNICIAN (Tech Ops)</option>
+            <option value="VIEWER">👁️ VIEWER (Read-Only)</option>
+          </select>
+        </div>
       </div>
+
 
       {/* NAVIGATION MENU */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>

@@ -31,11 +31,14 @@ public class PrinterServiceImpl implements PrinterService {
     @Override
     public PrinterResponse createPrinter(PrinterRequest request) {
 
-        PrinterModel printerModel = printerModelRepository.findById(request.getPrinterModelId())
-                .orElseThrow(() -> new RuntimeException("Printer model not found with id: " + request.getPrinterModelId()));
+        PrinterModel printerModel = request.getPrinterModelId() != null
+                ? printerModelRepository.findById(request.getPrinterModelId()).orElse(null)
+                : null;
 
-        PrinterLocation location = printerLocationRepository.findById(request.getLocationId())
-                .orElseThrow(() -> new RuntimeException("Location not found with id: " + request.getLocationId()));
+        PrinterLocation location = request.getLocationId() != null
+                ? printerLocationRepository.findById(request.getLocationId()).orElse(null)
+                : null;
+
 
         Printer printer = new Printer();
         printer.setName(request.getName());

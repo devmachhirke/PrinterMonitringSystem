@@ -12,4 +12,7 @@ public interface TonerStatusRepository extends JpaRepository<TonerStatus, Long> 
     List<TonerStatus> findByPrinterIdOrderByCollectedAtDesc(Long printerId);
 
     List<TonerStatus> findTop20ByPrinterIdOrderByCollectedAtDesc(Long printerId);
+
+    java.util.Optional<TonerStatus> findByPrinterIdAndCartridgeColor(Long printerId, com.printermonitoring.enums.CartridgeColor cartridgeColor);
+
 }

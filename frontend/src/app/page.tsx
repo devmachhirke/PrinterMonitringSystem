@@ -8,15 +8,18 @@ import {
   Wifi, 
   WifiOff, 
   AlertTriangle, 
-  Zap
+  Zap,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
-import { fetchPrinters, fetchTonerStatuses, fetchAlerts, pingPrinter, Printer, TonerStatus, AlertItem } from '@/lib/api';
+import { fetchPrinters, fetchTonerStatuses, fetchAlerts, pingPrinter, Printer, TonerStatus, AlertItem, PrinterPingResult } from '@/lib/api';
 
 export default function DashboardPage() {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [tonerList, setTonerList] = useState<TonerStatus[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [pingingId, setPingingId] = useState<number | null>(null);
+  const [pingResult, setPingResult] = useState<PrinterPingResult | null>(null);
 
   const loadData = async () => {
     try {
@@ -39,10 +42,18 @@ export default function DashboardPage() {
 
   const handlePing = async (id: number) => {
     setPingingId(id);
-    await pingPrinter(id);
-    await loadData();
-    setPingingId(null);
+    setPingResult(null);
+    try {
+      const res = await pingPrinter(id);
+      setPingResult(res);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPingingId(null);
+    }
   };
+
 
   const onlineCount = printers.filter(p => p.status !== 'OFFLINE').length;
   const offlineCount = printers.filter(p => p.status === 'OFFLINE').length;
@@ -101,6 +112,37 @@ export default function DashboardPage() {
               <p style={{ fontSize: '0.78rem', color: '#64748b' }}>Automated scheduled polling active (60s rate)</p>
             </div>
           </div>
+
+          {pingResult && (
+            <div style={{
+              padding: '12px 16px',
+              marginBottom: '16px',
+              borderRadius: '10px',
+              borderLeft: `4px solid ${pingResult.status === 'ONLINE' ? '#10b981' : '#f43f5e'}`,
+              background: pingResult.status === 'ONLINE' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem' }}>
+                {pingResult.status === 'ONLINE' ? (
+                  <CheckCircle2 size={18} color="#34d399" />
+                ) : (
+                  <XCircle size={18} color="#fb7185" />
+                )}
+                <span style={{ color: '#f8fafc', fontWeight: 600 }}>
+                  {pingResult.printerName}: {pingResult.message} ({pingResult.responseTimeMs} ms)
+                </span>
+              </div>
+              <button
+                onClick={() => setPingResult(null)}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.78rem' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
 
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>

@@ -28,11 +28,10 @@ public class PrinterRequest {
 
     private String osPrinterName;
 
-    @NotNull(message = "Printer model ID is required")
     private Long printerModelId;
 
-    @NotNull(message = "Location ID is required")
     private Long locationId;
+
 
     private Boolean monitoringEnabled = true;
 

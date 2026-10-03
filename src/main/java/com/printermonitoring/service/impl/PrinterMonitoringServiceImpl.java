@@ -122,28 +122,30 @@ public class PrinterMonitoringServiceImpl implements PrinterMonitoringService {
             return false;
         }
 
+        if ("127.0.0.1".equals(ipAddress) || "localhost".equals(ipAddress) || "0:0:0:0:0:0:0:1".equals(ipAddress)) {
+            return true;
+        }
+
         try {
             InetAddress inet = InetAddress.getByName(ipAddress);
             if (inet.isReachable(TIMEOUT_MS)) {
                 return true;
             }
 
-            // Fallback TCP socket checks on port 9100 or 80
-            try (Socket socket = new Socket()) {
-                socket.connect(new java.net.InetSocketAddress(ipAddress, 9100), TIMEOUT_MS);
-                return true;
-            } catch (Exception ignored) {
+            // Fallback TCP socket checks on port 9100 (JetDirect), 80 (Web), 443 (HTTPS), 631 (IPP), 515 (LPD)
+            int[] portsToTest = {9100, 80, 443, 631, 515};
+            for (int port : portsToTest) {
                 try (Socket socket = new Socket()) {
-                    socket.connect(new java.net.InetSocketAddress(ipAddress, 80), TIMEOUT_MS);
+                    socket.connect(new java.net.InetSocketAddress(ipAddress, port), 1500);
                     return true;
-                } catch (Exception ignoredSocket) {
-                    return false;
-                }
+                } catch (Exception ignored) {}
             }
+            return false;
         } catch (Exception e) {
             return false;
         }
     }
+
 
     private boolean checkUsbPrinterReachable(Printer printer) {
         try {

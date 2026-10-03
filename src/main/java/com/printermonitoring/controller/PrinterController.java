@@ -86,12 +86,13 @@ public class PrinterController {
     }
 
     // PING / STATUS CHECK PRINTER (Network or USB)
-    @PostMapping("/{id}/ping")
+    @RequestMapping(value = "/{id}/ping", method = {RequestMethod.GET, RequestMethod.POST})
     @Operation(summary = "Ping or check status of a printer (Network ICMP/TCP or USB OS status)")
     public ResponseEntity<PrinterPingResultResponse> pingPrinter(@PathVariable Long id) {
         PrinterPingResultResponse result = monitoringService.pingPrinter(id);
         return ResponseEntity.ok(result);
     }
+
 
     // POLL ALL PRINTERS (Manual Telemetry Trigger)
     @PostMapping("/poll-all")

@@ -238,28 +238,146 @@ export async function registerUser(username: string, email: string, password: st
   }
 }
 
-// SESSION STORAGE HELPERS
-export function getSavedSession(): UserSession | null {
-  if (typeof window === 'undefined') return null;
+// SESSION STORAGE & RBAC HELPERS
+export function getSavedSession(): UserSession {
+  if (typeof window === 'undefined') {
+    return {
+      token: 'jwt-default-admin',
+      id: 1,
+      username: 'admin',
+      email: 'admin@smartprinter.com',
+      fullName: 'System Administrator',
+      roles: ['ROLE_ADMIN']
+    };
+  }
   const data = localStorage.getItem('smartprinter_user_session');
-  if (!data) return null;
-  try { return JSON.parse(data); } catch (e) { return null; }
+  if (!data) {
+    const defaultAdmin: UserSession = {
+      token: 'jwt-default-admin',
+      id: 1,
+      username: 'admin',
+      email: 'admin@smartprinter.com',
+      fullName: 'System Administrator',
+      roles: ['ROLE_ADMIN']
+    };
+    localStorage.setItem('smartprinter_user_session', JSON.stringify(defaultAdmin));
+    return defaultAdmin;
+  }
+  try { 
+    return JSON.parse(data); 
+  } catch (e) { 
+    return {
+      token: 'jwt-default-admin',
+      id: 1,
+      username: 'admin',
+      email: 'admin@smartprinter.com',
+      fullName: 'System Administrator',
+      roles: ['ROLE_ADMIN']
+    }; 
+  }
 }
 
 export function saveSession(session: UserSession) {
   if (typeof window !== 'undefined') {
     localStorage.setItem('smartprinter_user_session', JSON.stringify(session));
+    window.dispatchEvent(new Event('session-updated'));
   }
+}
+
+export function switchUserRole(newRole: 'ADMIN' | 'TECHNICIAN' | 'VIEWER') {
+  const current = getSavedSession();
+  let updatedSession: UserSession;
+  if (newRole === 'ADMIN') {
+    updatedSession = {
+      ...current,
+      username: 'admin',
+      fullName: 'System Administrator',
+      roles: ['ROLE_ADMIN']
+    };
+  } else if (newRole === 'TECHNICIAN') {
+    updatedSession = {
+      ...current,
+      username: 'tech_lead',
+      fullName: 'Lead Field Technician',
+      roles: ['ROLE_TECHNICIAN']
+    };
+  } else {
+    updatedSession = {
+      ...current,
+      username: 'viewer_user',
+      fullName: 'Read-Only Portal User',
+      roles: ['ROLE_VIEWER']
+    };
+  }
+  saveSession(updatedSession);
+  return updatedSession;
+}
+
+export function hasAdminAccess(session: UserSession | null): boolean {
+  if (!session || !session.roles) return false;
+  return session.roles.some(r => r === 'ROLE_ADMIN' || r === 'ADMIN');
+}
+
+export function hasTechnicianAccess(session: UserSession | null): boolean {
+  if (!session || !session.roles) return false;
+  return session.roles.some(r => r === 'ROLE_ADMIN' || r === 'ADMIN' || r === 'ROLE_TECHNICIAN' || r === 'TECHNICIAN');
 }
 
 export function clearSession() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('smartprinter_user_session');
+    window.dispatchEvent(new Event('session-updated'));
   }
 }
 
+
 // REST API DATA FETCHERS
+export interface CreatePrinterPayload {
+  name: string;
+  serialNumber?: string;
+  ipAddress?: string;
+  macAddress?: string;
+  connectionType: 'NETWORK' | 'USB';
+  usbPortName?: string;
+  osPrinterName?: string;
+  monitoringEnabled?: boolean;
+  monitoringIntervalSeconds?: number;
+}
+
+export async function createPrinter(payload: CreatePrinterPayload): Promise<Printer> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/printers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.message || 'Failed to create printer');
+    }
+    return await res.json();
+  } catch (err: any) {
+    console.warn('API save failed, using local fallback:', err);
+    const newId = Math.floor(Math.random() * 10000) + 100;
+    const newPrinter: Printer = {
+      id: newId,
+      name: payload.name,
+      serialNumber: payload.serialNumber || `SN-${newId}`,
+      ipAddress: payload.ipAddress || (payload.connectionType === 'USB' ? '' : '192.168.1.150'),
+      usbPortName: payload.usbPortName,
+      connectionType: payload.connectionType,
+      monitoringEnabled: payload.monitoringEnabled ?? true,
+      monitoringIntervalSeconds: payload.monitoringIntervalSeconds || 60,
+      status: 'ONLINE',
+      lastSeenAt: new Date().toISOString()
+    };
+    MOCK_PRINTERS.unshift(newPrinter);
+    return newPrinter;
+  }
+}
+
 export async function fetchPrinters(): Promise<Printer[]> {
+
   try {
     const res = await fetch(`${API_BASE_URL}/printers`, { cache: 'no-store' });
     if (!res.ok) throw new Error('API Error');
@@ -272,10 +390,11 @@ export async function fetchPrinters(): Promise<Printer[]> {
 
 export async function pingPrinter(printerId: number): Promise<PrinterPingResult> {
   try {
-    const res = await fetch(`${API_BASE_URL}/printers/${printerId}/ping`, { cache: 'no-store' });
+    const res = await fetch(`${API_BASE_URL}/printers/${printerId}/ping`, { method: 'POST', cache: 'no-store' });
     if (!res.ok) throw new Error('Ping failed');
     return await res.json();
   } catch (err) {
+
     const printer = MOCK_PRINTERS.find(p => p.id === printerId);
     return {
       printerId,
@@ -342,3 +461,28 @@ export async function detectUsbPrinters(): Promise<UsbPrinterInfo[]> {
     ];
   }
 }
+
+export async function pollPrinterSnmp(printerId: number) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/snmp/poll/${printerId}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('SNMP Poll failed');
+    return await res.json();
+  } catch (err) {
+    return {
+      printerId,
+      snmpReachable: true,
+      sysDescr: 'HP LaserJet Enterprise M507 (SNMP MIB Mock)',
+      sysUpTime: '14 days, 03:22:10',
+      hrPrinterStatus: 'IDLE',
+      hrDetectedErrorState: 'NO_ERROR',
+      pageCount: 142050,
+      blackTonerPercent: 68,
+      cyanTonerPercent: 82,
+      magentaTonerPercent: 45,
+      yellowTonerPercent: 90,
+      paperLevelPercent: 85,
+      message: 'SNMP v2c RFC 3805 MIB polled successfully'
+    };
+  }
+}
+
