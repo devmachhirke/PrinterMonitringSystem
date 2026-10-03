@@ -12,17 +12,22 @@ import {
   Usb,
   LogOut,
   UserCheck,
-  ShieldAlert
+  ShieldCheck,
+  FileText,
+  Brain
 } from 'lucide-react';
 import { getSavedSession, clearSession, switchUserRole, UserSession } from '@/lib/api';
 
 const NAV_ITEMS = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Printer Fleet', href: '/printers', icon: Printer },
+  { name: 'Print Execution Jobs', href: '/print-jobs', icon: FileText },
   { name: 'Toner & Paper', href: '/consumables', icon: Droplet },
+  { name: 'AI Predictive', href: '/ai-analytics', icon: Brain },
   { name: 'Alerts & Errors', href: '/alerts', icon: AlertTriangle },
-  { name: 'Maintenance', href: '/maintenance', icon: Wrench },
+  { name: 'Maintenance Ops', href: '/maintenance', icon: Wrench },
   { name: 'USB & Network Scan', href: '/discovery', icon: Usb },
+  { name: 'Admin & Audit Logs', href: '/admin', icon: ShieldCheck },
 ];
 
 export default function Sidebar() {

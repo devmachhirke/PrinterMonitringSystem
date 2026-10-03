@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { RefreshCw, Activity, Bell, Search, UserCheck } from 'lucide-react';
+import { RefreshCw, Activity, Bell, Search, Wifi, WifiOff } from 'lucide-react';
 import { pollAllPrinters, getSavedSession, UserSession } from '@/lib/api';
+import { usePrinterSocket } from '@/lib/usePrinterSocket';
 
 interface HeaderProps {
   onRefresh?: () => void;
@@ -14,6 +15,8 @@ export default function Header({ onRefresh }: HeaderProps) {
   const [polling, setPolling] = useState(false);
   const [lastPolled, setLastPolled] = useState<string>('Just now');
   const [session, setSession] = useState<UserSession | null>(null);
+
+  const { isConnected } = usePrinterSocket();
 
   useEffect(() => {
     setSession(getSavedSession());
@@ -69,6 +72,23 @@ export default function Header({ onRefresh }: HeaderProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* Real-time WebSocket Live Connection Pill */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 12px',
+          borderRadius: '20px',
+          background: isConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+          border: isConnected ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(244, 63, 94, 0.3)',
+          fontSize: '0.78rem',
+          fontWeight: 600,
+          color: isConnected ? '#10b981' : '#f43f5e'
+        }}>
+          {isConnected ? <Wifi size={14} className="pulse-icon" /> : <WifiOff size={14} />}
+          <span>{isConnected ? 'STOMP WebSockets Live' : 'WebSocket Reconnecting...'}</span>
+        </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#94a3b8' }}>
           <Activity size={14} color="#38bdf8" />
           <span>Last polled: <strong style={{ color: '#f8fafc' }}>{lastPolled}</strong></span>

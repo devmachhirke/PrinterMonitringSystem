@@ -1,14 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchPrinters, pingPrinter, createPrinter, Printer, PrinterPingResult, CreatePrinterPayload, getSavedSession, hasAdminAccess, hasTechnicianAccess, UserSession } from '@/lib/api';
-import { Printer as PrinterIcon, Plus, Zap, CheckCircle2, XCircle, RefreshCw, X, Lock } from 'lucide-react';
+import { 
+  fetchPrinters, 
+  pingPrinter, 
+  createPrinter, 
+  submitPrintJob, 
+  printTestPage, 
+  Printer, 
+  PrinterPingResult, 
+  CreatePrinterPayload, 
+  PrintJobResponseData, 
+  getSavedSession, 
+  hasAdminAccess, 
+  hasTechnicianAccess, 
+  UserSession 
+} from '@/lib/api';
+import { Printer as PrinterIcon, Plus, Zap, CheckCircle2, XCircle, RefreshCw, X, Lock, FileText, Send } from 'lucide-react';
 
 export default function PrintersPage() {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
   const [pingingId, setPingingId] = useState<number | null>(null);
+  const [printingId, setPrintingId] = useState<number | null>(null);
   const [lastPingResult, setLastPingResult] = useState<PrinterPingResult | null>(null);
+  const [lastPrintResult, setLastPrintResult] = useState<PrintJobResponseData | null>(null);
   const [session, setSession] = useState<UserSession | null>(null);
 
   // Add Printer Modal state
@@ -16,6 +32,14 @@ export default function PrintersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Custom Print Document Modal State
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedPrinterForPrint, setSelectedPrinterForPrint] = useState<Printer | null>(null);
+  const [documentTitle, setDocumentTitle] = useState('Official Company Notice');
+  const [documentContent, setDocumentContent] = useState('This is a test printed document sent from Smart Printer Monitoring System.\n\nDate: ' + new Date().toLocaleDateString() + '\nAuthor: Administrator\nStatus: Verified');
+  const [copies, setCopies] = useState(1);
+  const [isPrintingJob, setIsPrintingJob] = useState(false);
 
   const syncSession = () => {
     setSession(getSavedSession());
@@ -79,6 +103,44 @@ export default function PrintersPage() {
       console.error('Ping test failed:', err);
     } finally {
       setPingingId(null);
+    }
+  };
+
+  const handlePrintTestPage = async (printerId: number) => {
+    setPrintingId(printerId);
+    setLastPrintResult(null);
+    try {
+      const res = await printTestPage(printerId, session?.fullName || 'System Administrator');
+      setLastPrintResult(res);
+      setSuccessMsg(`Diagnostic test page sent to ${res.printerName}. Status: ${res.status}`);
+    } catch (err: any) {
+      console.error('Test page print failed:', err);
+    } finally {
+      setPrintingId(null);
+    }
+  };
+
+  const handleCustomPrintSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPrinterForPrint) return;
+
+    setIsPrintingJob(true);
+    try {
+      const res = await submitPrintJob({
+        printerId: selectedPrinterForPrint.id,
+        jobName: documentTitle,
+        content: documentContent,
+        copies: copies,
+        printedBy: session?.fullName || 'System User'
+      });
+
+      setLastPrintResult(res);
+      setSuccessMsg(`Document "${res.jobName}" successfully sent to ${selectedPrinterForPrint.name}! Status: ${res.status}`);
+      setIsPrintModalOpen(false);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsPrintingJob(false);
     }
   };
 
@@ -251,27 +313,39 @@ export default function PrintersPage() {
                 </div>
               </div>
 
-              <div style={{ marginTop: '24px', display: 'flex', gap: '10px' }}>
+              <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => isTechOrAdmin && handlePingTest(printer.id)}
+                    disabled={isPinging || !isTechOrAdmin}
+                    className="btn-secondary"
+                    style={{ flex: 1, justifyContent: 'center', padding: '8px', fontSize: '0.78rem' }}
+                  >
+                    <Zap size={13} className={isPinging ? 'spin' : ''} color="#38bdf8" />
+                    <span>{isPinging ? 'Pinging...' : 'Ping Test'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handlePrintTestPage(printer.id)}
+                    disabled={printingId === printer.id}
+                    className="btn-secondary"
+                    style={{ flex: 1, justifyContent: 'center', padding: '8px', fontSize: '0.78rem' }}
+                  >
+                    <FileText size={13} color="#a855f7" />
+                    <span>{printingId === printer.id ? 'Printing...' : 'Test Page'}</span>
+                  </button>
+                </div>
+
                 <button
-                  onClick={() => isTechOrAdmin && handlePingTest(printer.id)}
-                  disabled={isPinging || !isTechOrAdmin}
-                  className={isTechOrAdmin ? "btn-primary" : "btn-secondary"}
-                  style={{ 
-                    flex: 1, 
-                    justifyContent: 'center', 
-                    padding: '8px 12px', 
-                    fontSize: '0.82rem', 
-                    opacity: (!isTechOrAdmin || isPinging) ? 0.65 : 1,
-                    cursor: isTechOrAdmin ? 'pointer' : 'not-allowed'
+                  onClick={() => {
+                    setSelectedPrinterForPrint(printer);
+                    setIsPrintModalOpen(true);
                   }}
-                  title={isTechOrAdmin ? 'Execute live ICMP/TCP ping test' : 'Technician or Admin role required to ping'}
+                  className="btn-primary"
+                  style={{ width: '100%', justifyContent: 'center', padding: '8px', fontSize: '0.82rem' }}
                 >
-                  {isTechOrAdmin ? (
-                    <Zap size={14} className={isPinging ? 'spin' : ''} />
-                  ) : (
-                    <Lock size={13} color="#94a3b8" />
-                  )}
-                  <span>{isTechOrAdmin ? (isPinging ? 'Testing Ping...' : 'Ping Test') : 'Tech Access Required'}</span>
+                  <Send size={14} />
+                  <span>Print Custom Paper Document</span>
                 </button>
               </div>
 
@@ -460,6 +534,186 @@ export default function PrintersPage() {
                 >
                   {isSubmitting ? 'Registering...' : 'Register Printer'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PRINT CUSTOM DOCUMENT MODAL */}
+      {isPrintModalOpen && selectedPrinterForPrint && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '560px',
+            padding: '28px',
+            borderRadius: '16px',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--panel-bg)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ padding: '8px', background: 'rgba(168, 85, 247, 0.15)', borderRadius: '10px' }}>
+                  <Send size={20} color="#a855f7" />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+                    Send Document to Printer
+                  </h2>
+                  <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
+                    Target: <strong style={{ color: '#38bdf8' }}>{selectedPrinterForPrint.name}</strong> ({selectedPrinterForPrint.connectionType})
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPrintModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCustomPrintSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                  Document Title / Job Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Q4 Financial Audit Report"
+                  value={documentTitle}
+                  onChange={e => setDocumentTitle(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'rgba(15, 23, 42, 0.6)',
+                    color: '#f8fafc',
+                    fontSize: '0.88rem',
+                    outline: 'none'
+                  }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                  Number of Copies
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={copies}
+                  onChange={e => setCopies(parseInt(e.target.value) || 1)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'rgba(15, 23, 42, 0.6)',
+                    color: '#f8fafc',
+                    fontSize: '0.88rem',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                  Paper Document Content / Text *
+                </label>
+                <textarea
+                  rows={5}
+                  value={documentContent}
+                  onChange={e => setDocumentContent(e.target.value)}
+                  placeholder="Type or paste the document text to be printed..."
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'rgba(15, 23, 42, 0.6)',
+                    color: '#f8fafc',
+                    fontSize: '0.85rem',
+                    fontFamily: 'monospace',
+                    outline: 'none',
+                    resize: 'vertical'
+                  }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const printWin = window.open('', '_blank');
+                    if (printWin) {
+                      printWin.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                          <head>
+                            <title>${documentTitle}</title>
+                            <style>
+                              body { font-family: 'Courier New', monospace; padding: 40px; white-space: pre-wrap; font-size: 13pt; line-height: 1.5; }
+                              .header { font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 16px; font-size: 16pt; }
+                              .footer { margin-top: 30px; border-top: 1px solid #ccc; pt-2; font-size: 9pt; color: #666; }
+                            </style>
+                          </head>
+                          <body>
+                            <div class="header">${documentTitle}</div>
+                            <div>${documentContent}</div>
+                            <div class="footer">Target Printer: ${selectedPrinterForPrint.name} &bull; Date: ${new Date().toLocaleString()}</div>
+                            <script>
+                              window.onload = function() { window.print(); }
+                            </script>
+                          </body>
+                        </html>
+                      `);
+                      printWin.document.close();
+                    }
+                  }}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  <PrinterIcon size={14} color="#38bdf8" />
+                  <span>Browser Print Window (Ctrl+P)</span>
+                </button>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setIsPrintModalOpen(false)}
+                    disabled={isPrintingJob}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={isPrintingJob}
+                    style={{ background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)' }}
+                  >
+                    <Send size={15} />
+                    <span>{isPrintingJob ? 'Transmitting to Hardware...' : 'Send Hardware Job'}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
