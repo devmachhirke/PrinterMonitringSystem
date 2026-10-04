@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
-import { RefreshCw, Activity, Bell, Search, Wifi, WifiOff } from 'lucide-react';
-import { pollAllPrinters, getSavedSession, UserSession } from '@/lib/api';
+import { usePathname, useRouter } from 'next/navigation';
+import { RefreshCw, Activity, Bell, Search, Wifi, WifiOff, LogOut, User } from 'lucide-react';
+import { pollAllPrinters, getSavedSession, clearSession, UserSession } from '@/lib/api';
 import { usePrinterSocket } from '@/lib/usePrinterSocket';
 
 interface HeaderProps {
@@ -12,14 +12,21 @@ interface HeaderProps {
 
 export default function Header({ onRefresh }: HeaderProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [polling, setPolling] = useState(false);
   const [lastPolled, setLastPolled] = useState<string>('Just now');
   const [session, setSession] = useState<UserSession | null>(null);
 
   const { isConnected } = usePrinterSocket();
 
-  useEffect(() => {
+  const syncSession = () => {
     setSession(getSavedSession());
+  };
+
+  useEffect(() => {
+    syncSession();
+    window.addEventListener('session-updated', syncSession);
+    return () => window.removeEventListener('session-updated', syncSession);
   }, [pathname]);
 
   if (pathname === '/login' || pathname === '/signup') {
@@ -37,6 +44,12 @@ export default function Header({ onRefresh }: HeaderProps) {
     } finally {
       setPolling(false);
     }
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setSession(null);
+    router.push('/login');
   };
 
   return (
@@ -126,6 +139,64 @@ export default function Header({ onRefresh }: HeaderProps) {
             borderRadius: '50%',
             background: '#f43f5e'
           }}></span>
+        </div>
+
+        {/* LOGOUT / USER PROFILE BUTTON */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          paddingLeft: '12px',
+          borderLeft: '1px solid var(--border-subtle)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: '34px',
+              height: '34px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #0284c7 0%, #a855f7 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              boxShadow: '0 0 12px rgba(56, 189, 248, 0.3)'
+            }}>
+              {session?.fullName?.charAt(0) || session?.username?.charAt(0) || <User size={16} />}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f8fafc' }}>
+                {session?.fullName || session?.username || 'Admin'}
+              </span>
+              <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                @{session?.username || 'admin'}
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            title="Sign Out of Portal"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              borderRadius: '8px',
+              background: 'rgba(244, 63, 94, 0.15)',
+              border: '1px solid rgba(244, 63, 94, 0.35)',
+              color: '#fb7185',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              marginLeft: '4px'
+            }}
+          >
+            <LogOut size={14} />
+            <span>Sign Out</span>
+          </button>
         </div>
 
         <style jsx global>{`

@@ -1,24 +1,31 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchUsers, fetchAuditLogs, UserItem, AuditLogItem } from '@/lib/api';
+import { useRouter } from 'next/navigation';
+import { fetchUsers, fetchAuditLogs, getSavedSession, hasAdminAccess, UserItem, AuditLogItem, UserSession } from '@/lib/api';
 import StatCard from '@/components/StatCard';
-import { Users, Shield, ShieldCheck, FileText, UserPlus, Clock, Lock, CheckCircle2 } from 'lucide-react';
+import { Users, Shield, ShieldCheck, FileText, UserPlus, Clock, Lock, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 export default function AdminConsolePage() {
+  const router = useRouter();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<UserSession | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [uData, lData] = await Promise.all([
-        fetchUsers(),
-        fetchAuditLogs()
-      ]);
-      setUsers(uData);
-      setLogs(lData);
+      const s = getSavedSession();
+      setSession(s);
+      if (hasAdminAccess(s)) {
+        const [uData, lData] = await Promise.all([
+          fetchUsers(),
+          fetchAuditLogs()
+        ]);
+        setUsers(uData);
+        setLogs(lData);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -28,10 +35,67 @@ export default function AdminConsolePage() {
 
   useEffect(() => {
     loadData();
+    const handleSessionUpdate = () => {
+      const s = getSavedSession();
+      setSession(s);
+      if (hasAdminAccess(s)) {
+        loadData();
+      }
+    };
+    window.addEventListener('session-updated', handleSessionUpdate);
+    return () => window.removeEventListener('session-updated', handleSessionUpdate);
   }, []);
 
-  const adminUsersCount = users.filter(u => u.roles?.some(r => r.includes('ADMIN'))).length;
-  const techUsersCount = users.filter(u => u.roles?.some(r => r.includes('TECHNICIAN'))).length;
+  const isAdmin = hasAdminAccess(session);
+
+  if (!loading && !isAdmin) {
+    return (
+      <div className="glass-panel" style={{ padding: '48px 32px', textAlign: 'center', maxWidth: '600px', margin: '60px auto', borderRadius: '20px' }}>
+        <div style={{
+          width: '64px',
+          height: '64px',
+          borderRadius: '50%',
+          background: 'rgba(244, 63, 94, 0.15)',
+          border: '1px solid rgba(244, 63, 94, 0.3)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fb7185',
+          marginBottom: '20px'
+        }}>
+          <ShieldAlert size={34} />
+        </div>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc', marginBottom: '8px' }}>
+          Access Denied -- Administrator Privileges Required
+        </h2>
+        <p style={{ fontSize: '0.88rem', color: '#94a3b8', marginBottom: '28px', lineHeight: 1.6 }}>
+          The User Directory Management console and System Audit Logs are strictly restricted to accounts with <strong>ADMINISTRATOR</strong> roles. Your current access level is <strong>{session?.roles?.[0]?.replace('ROLE_', '') || 'GUEST / NON_ADMIN'}</strong>.
+        </p>
+        <button
+          onClick={() => router.push('/')}
+          className="btn-primary"
+          style={{ padding: '12px 24px', fontSize: '0.9rem' }}
+        >
+          Return to Monitoring Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  const getRoleName = (r: any): string => {
+    if (!r) return '';
+    if (typeof r === 'string') return r;
+    if (typeof r === 'object') return r.name || r.role || r.authority || '';
+    return String(r);
+  };
+
+  const hasRole = (u: UserItem, target: string): boolean => {
+    if (!u || !u.roles || !Array.isArray(u.roles)) return false;
+    return u.roles.some(r => getRoleName(r).toUpperCase().includes(target.toUpperCase()));
+  };
+
+  const adminUsersCount = (users || []).filter(u => hasRole(u, 'ADMIN')).length;
+  const techUsersCount = (users || []).filter(u => hasRole(u, 'TECHNICIAN')).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -98,8 +162,10 @@ export default function AdminConsolePage() {
               </thead>
               <tbody>
                 {users.map(u => {
-                  const roleStr = u.roles ? u.roles.map(r => r.replace('ROLE_', '')).join(', ') : 'USER';
-                  const isAdmin = roleStr.includes('ADMIN');
+                  const roleStr = (u.roles && Array.isArray(u.roles))
+                    ? u.roles.map(r => getRoleName(r).replace(/^ROLE_/, '')).filter(Boolean).join(', ')
+                    : 'USER';
+                  const isAdmin = roleStr.toUpperCase().includes('ADMIN');
 
                   return (
                     <tr key={u.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>

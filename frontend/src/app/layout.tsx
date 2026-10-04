@@ -3,7 +3,9 @@
 import './globals.css';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { getSavedSession } from '@/lib/api';
 
 export default function RootLayout({
   children,
@@ -11,7 +13,44 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isAuthPage = pathname === '/login' || pathname === '/signup';
+
+  const [mounted, setMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const session = getSavedSession();
+    if (!session && !isAuthPage) {
+      setIsAuthenticated(false);
+      router.replace('/login');
+    } else if (session && isAuthPage) {
+      setIsAuthenticated(true);
+      router.replace('/');
+    } else {
+      setIsAuthenticated(!!session);
+    }
+
+    const handleSessionUpdate = () => {
+      const updated = getSavedSession();
+      setIsAuthenticated(!!updated);
+    };
+
+    window.addEventListener('session-updated', handleSessionUpdate);
+    return () => window.removeEventListener('session-updated', handleSessionUpdate);
+  }, [pathname, isAuthPage, router]);
+
+  if (!mounted) {
+    return (
+      <html lang="en">
+        <head>
+          <title>SmartPrinter - Enterprise Telemetry &amp; Monitoring Portal</title>
+        </head>
+        <body style={{ background: '#0a0e1a', minHeight: '100vh' }} />
+      </html>
+    );
+  }
 
   return (
     <html lang="en">
@@ -20,7 +59,7 @@ export default function RootLayout({
         <meta name="description" content="Real-time smart printer status monitoring, toner levels, paper trays, and predictive maintenance." />
       </head>
       <body>
-        {isAuthPage ? (
+        {isAuthPage || !isAuthenticated ? (
           <main style={{ minHeight: '100vh' }}>
             {children}
           </main>

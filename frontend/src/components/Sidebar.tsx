@@ -16,7 +16,7 @@ import {
   FileText,
   Brain
 } from 'lucide-react';
-import { getSavedSession, clearSession, switchUserRole, UserSession } from '@/lib/api';
+import { getSavedSession, clearSession, switchUserRole, hasAdminAccess, UserSession } from '@/lib/api';
 
 const NAV_ITEMS = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { name: 'Alerts & Errors', href: '/alerts', icon: AlertTriangle },
   { name: 'Maintenance Ops', href: '/maintenance', icon: Wrench },
   { name: 'USB & Network Scan', href: '/discovery', icon: Usb },
-  { name: 'Admin & Audit Logs', href: '/admin', icon: ShieldCheck },
+  { name: 'Admin & Audit Logs', href: '/admin', icon: ShieldCheck, adminOnly: true },
 ];
 
 export default function Sidebar() {
@@ -60,11 +60,18 @@ export default function Sidebar() {
 
   // Don't render sidebar on standalone auth pages
   if (pathname === '/login' || pathname === '/signup') {
-
     return null;
   }
 
-  const primaryRole = session?.roles?.[0]?.replace('ROLE_', '') || 'GUEST';
+  const getPrimaryRole = (): string => {
+    if (!session || !session.roles || !Array.isArray(session.roles) || session.roles.length === 0) return 'GUEST';
+    const first = session.roles[0];
+    const str = typeof first === 'string' ? first : (first as any)?.name || String(first || '');
+    return str.replace(/^ROLE_/, '') || 'GUEST';
+  };
+
+  const primaryRole = getPrimaryRole();
+  const isAdminUser = hasAdminAccess(session);
 
   return (
     <aside style={{
@@ -157,7 +164,6 @@ export default function Sidebar() {
         </div>
       </div>
 
-
       {/* NAVIGATION MENU */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
         <p style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', padding: '0 12px 8px 12px' }}>
@@ -165,6 +171,9 @@ export default function Sidebar() {
         </p>
 
         {NAV_ITEMS.map((item) => {
+          if (item.adminOnly && !isAdminUser) {
+            return null;
+          }
           const Icon = item.icon;
           const isActive = pathname === item.href;
 
@@ -196,23 +205,22 @@ export default function Sidebar() {
 
       {/* LOGOUT BUTTON */}
       <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
-        {session ? (
-          <button
-            onClick={handleLogout}
-            className="btn-secondary"
-            style={{ width: '100%', justifyContent: 'center', color: '#fb7185', padding: '10px' }}
-          >
-            <LogOut size={16} /> Sign Out
-          </button>
-        ) : (
-          <Link
-            href="/login"
-            className="btn-primary"
-            style={{ width: '100%', justifyContent: 'center', padding: '10px', textDecoration: 'none' }}
-          >
-            Sign In / Register
-          </Link>
-        )}
+        <button
+          onClick={handleLogout}
+          className="btn-secondary"
+          style={{
+            width: '100%',
+            justifyContent: 'center',
+            color: '#fb7185',
+            background: 'rgba(244, 63, 94, 0.12)',
+            border: '1px solid rgba(244, 63, 94, 0.3)',
+            padding: '10px',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          <LogOut size={16} /> Sign Out
+        </button>
       </div>
     </aside>
   );

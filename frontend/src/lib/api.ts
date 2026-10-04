@@ -239,41 +239,18 @@ export async function registerUser(username: string, email: string, password: st
 }
 
 // SESSION STORAGE & RBAC HELPERS
-export function getSavedSession(): UserSession {
+export function getSavedSession(): UserSession | null {
   if (typeof window === 'undefined') {
-    return {
-      token: 'jwt-default-admin',
-      id: 1,
-      username: 'admin',
-      email: 'admin@smartprinter.com',
-      fullName: 'System Administrator',
-      roles: ['ROLE_ADMIN']
-    };
+    return null;
   }
   const data = localStorage.getItem('smartprinter_user_session');
   if (!data) {
-    const defaultAdmin: UserSession = {
-      token: 'jwt-default-admin',
-      id: 1,
-      username: 'admin',
-      email: 'admin@smartprinter.com',
-      fullName: 'System Administrator',
-      roles: ['ROLE_ADMIN']
-    };
-    localStorage.setItem('smartprinter_user_session', JSON.stringify(defaultAdmin));
-    return defaultAdmin;
+    return null;
   }
   try { 
     return JSON.parse(data); 
   } catch (e) { 
-    return {
-      token: 'jwt-default-admin',
-      id: 1,
-      username: 'admin',
-      email: 'admin@smartprinter.com',
-      fullName: 'System Administrator',
-      roles: ['ROLE_ADMIN']
-    }; 
+    return null; 
   }
 }
 
@@ -285,7 +262,14 @@ export function saveSession(session: UserSession) {
 }
 
 export function switchUserRole(newRole: 'ADMIN' | 'TECHNICIAN' | 'VIEWER') {
-  const current = getSavedSession();
+  const current = getSavedSession() || {
+    token: 'jwt-token',
+    id: 1,
+    username: 'user',
+    email: 'user@smartprinter.com',
+    fullName: 'Portal User',
+    roles: ['ROLE_VIEWER']
+  };
   let updatedSession: UserSession;
   if (newRole === 'ADMIN') {
     updatedSession = {
@@ -314,13 +298,19 @@ export function switchUserRole(newRole: 'ADMIN' | 'TECHNICIAN' | 'VIEWER') {
 }
 
 export function hasAdminAccess(session: UserSession | null): boolean {
-  if (!session || !session.roles) return false;
-  return session.roles.some(r => r === 'ROLE_ADMIN' || r === 'ADMIN');
+  if (!session || !session.roles || !Array.isArray(session.roles)) return false;
+  return session.roles.some(r => {
+    const str = typeof r === 'string' ? r : (r as any)?.name || (r as any)?.role || String(r || '');
+    return str === 'ROLE_ADMIN' || str === 'ADMIN';
+  });
 }
 
 export function hasTechnicianAccess(session: UserSession | null): boolean {
-  if (!session || !session.roles) return false;
-  return session.roles.some(r => r === 'ROLE_ADMIN' || r === 'ADMIN' || r === 'ROLE_TECHNICIAN' || r === 'TECHNICIAN');
+  if (!session || !session.roles || !Array.isArray(session.roles)) return false;
+  return session.roles.some(r => {
+    const str = typeof r === 'string' ? r : (r as any)?.name || (r as any)?.role || String(r || '');
+    return str === 'ROLE_ADMIN' || str === 'ADMIN' || str === 'ROLE_TECHNICIAN' || str === 'TECHNICIAN';
+  });
 }
 
 export function clearSession() {
